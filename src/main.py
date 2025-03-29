@@ -5,11 +5,18 @@ import os
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-BAN_KEYWORDS = ["18+"]
+BAN_KEYWORDS = []
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def get_keywords():
+    with open("./src/keywords.txt", mode="r", encoding="utf-8") as keywords_file:
+        for keyword in keywords_file:
+            BAN_KEYWORDS.append(keyword)
+
+    logger.info(f"Ban keywords: {BAN_KEYWORDS}")
 
 
 async def check_new_members(update: Update, context):
@@ -18,10 +25,13 @@ async def check_new_members(update: Update, context):
         for keyword in BAN_KEYWORDS:
             if member.name and keyword.lower() in member.name.lower():
                 await ban_message(context, update, member, chat_id)
+                return
             elif member.full_name and keyword.lower() in member.full_name.lower():
                 await ban_message(context, update, member, chat_id)
+                return
             elif member.first_name and keyword.lower() in member.first_name.lower():
                 await ban_message(context, update, member, chat_id)
+                return
             elif member.last_name and keyword.lower() in member.last_name.lower():
                 await ban_message(context, update, member, chat_id)
 
@@ -38,6 +48,8 @@ async def ban_message(context, update, member, chat_id):
 
 
 def main():
+    get_keywords()
+
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_new_members))
