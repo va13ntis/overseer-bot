@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_keywords():
-    with open("./src/keywords.txt", mode="r", encoding="utf-8") as keywords_file:
+    with open("keywords.txt", mode="r", encoding="utf-8") as keywords_file:
         for keyword in keywords_file:
             BAN_KEYWORDS.append(keyword)
 
