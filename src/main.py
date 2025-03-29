@@ -5,6 +5,7 @@ import os
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 BAN_KEYWORDS = []
 
 
@@ -55,7 +56,12 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_new_members))
 
     logger.info("Bot started...")
-    app.run_polling()
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 8443)),  # Render assigns a dynamic port
+        webhook_url=f"{WEBHOOK_URL}/webhook"
+    )
 
 
 if __name__ == "__main__":
