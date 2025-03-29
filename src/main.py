@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def get_keywords():
     with open("keywords.txt", mode="r", encoding="utf-8") as keywords_file:
         for keyword in keywords_file:
-            BAN_KEYWORDS.append(keyword)
+            BAN_KEYWORDS.append(keyword.rstrip("\r\n"))
 
     logger.info(f"Ban keywords: {BAN_KEYWORDS}")
 
