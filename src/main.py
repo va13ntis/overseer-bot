@@ -2,10 +2,9 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 import logging
 import os
-
+import time
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 BAN_KEYWORDS = []
 
 
@@ -57,11 +56,12 @@ def main():
 
     logger.info("Bot started...")
 
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8443)),  # Render assigns a dynamic port
-        webhook_url=f"{WEBHOOK_URL}/webhook"
-    )
+    while True:
+        try:
+            app.run_polling()
+        except Exception as e:
+            print(f"Bot crashed: {e}")
+            time.sleep(5)
 
 
 if __name__ == "__main__":
