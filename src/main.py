@@ -1,13 +1,21 @@
 import logging
 import os
 import random
+import sqlite3
 import time
 
 from telegram import Update
 from telegram.constants import ChatAction
-from telegram.ext import CommandHandler, MessageHandler, filters, ApplicationBuilder, CallbackContext
+from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters, ApplicationBuilder, CallbackContext
 
 
+ADMIN_IDS = [
+    int(id_str.strip())
+    for id_str in os.getenv("ADMIN_IDS", "").split(",")
+    if id_str.strip().isdigit()
+]
+
+KEYWORDS_DB = "keywords.db"
 BOT_NAME = "@va13ntis_bot"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BAN_KEYWORDS = []
@@ -16,12 +24,121 @@ BAN_KEYWORDS = []
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_keywords():
-    with open("keywords.txt", mode="r", encoding="utf-8") as keywords_file:
-        for keyword in keywords_file:
-            BAN_KEYWORDS.append(keyword.rstrip("\r\n"))
 
-    logger.info(f"Ban keywords: {BAN_KEYWORDS}")
+def init_db():
+    conn = sqlite3.connect(KEYWORDS_DB)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS banned_keywords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword TEXT UNIQUE NOT NULL
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def add_keyword(keyword: str):
+    with sqlite3.connect(KEYWORDS_DB) as conn:
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("INSERT INTO banned_keywords (keyword) VALUES (?)", (keyword.rstrip("\r\n"),))
+            conn.commit()
+
+            return True
+
+        except sqlite3.IntegrityError:
+            return False # already exists
+
+
+def remove_keyword(keyword: str):
+    with sqlite3.connect(KEYWORDS_DB) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM banned_keywords WHERE keyword = ?", (keyword.rstrip("\r\n"),))
+
+        conn.commit()
+
+
+def clear_keywords():
+    with sqlite3.connect(KEYWORDS_DB) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM banned_keywords")
+
+        conn.commit()
+
+
+def list_keywords():
+    with sqlite3.connect(KEYWORDS_DB) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT keyword FROM banned_keywords")
+
+        rows = cursor.fetchall()
+
+    return [row[0] for row in rows]
+
+
+def is_admin(user_id: int):
+    return user_id in ADMIN_IDS
+
+
+async def add_keyword_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("You don't have permission.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /add_keyword <word>")
+        return
+
+    keyword = " ".join(context.args).strip().lower()
+    success = add_keyword(keyword)
+    if success:
+        await update.message.reply_text(f"Keyword '{keyword}' added.")
+    else:
+        await update.message.reply_text(f"Keyword '{keyword}' already exists.")
+
+
+async def remove_keyword_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("You don't have permission.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /remove_keyword <word>")
+        return
+
+    keyword = " ".join(context.args).strip().lower()
+    remove_keyword(keyword)
+    await update.message.reply_text(f"Keyword '{keyword}' removed (if it existed).")
+
+
+async def clear_keywords_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("You don't have permission.")
+        return
+
+
+async def list_keywords_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("You don't have permission.")
+        return
+
+    keywords = list_keywords()
+    if keywords:
+        await update.message.reply_text("Banned keywords:\n" + "\n".join(keywords))
+    else:
+        await update.message.reply_text("No keywords added yet.")
+
+
+async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"Your user ID is: {user_id}")
 
 
 async def handle_messages(update: Update, context: CallbackContext):
@@ -79,9 +196,15 @@ async def ban_message(context, update, member, chat_id):
 
 
 def main():
-    get_keywords()
+    init_db()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("add_keyword", add_keyword_cmd))
+    app.add_handler(CommandHandler("remove_keyword", remove_keyword_cmd))
+    app.add_handler(CommandHandler("clear_keywords", clear_keywords_cmd))
+    app.add_handler(CommandHandler("list_keywords", list_keywords_cmd))
+    app.add_handler(CommandHandler("whoami", whoami))
 
     # Ban unwanted users when they join
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_members))
