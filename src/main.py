@@ -4,11 +4,14 @@ import random
 import sqlite3
 import time
 
+from dotenv import load_dotenv
 from telegram import Update, ChatMemberAdministrator, ChatMemberOwner, InlineKeyboardMarkup, InlineKeyboardButton, \
     ReplyKeyboardMarkup, KeyboardButton
 from telegram.constants import ChatAction
 from telegram.ext import CommandHandler, ContextTypes, MessageHandler, filters, ApplicationBuilder, CallbackContext, \
     CallbackQueryHandler, ConversationHandler
+
+load_dotenv()
 
 ADMIN_GROUP_ID = int(os.getenv("ADMIN_GROUP_ID"))
 KEYWORDS_DB = "keywords.db"
@@ -97,7 +100,7 @@ def menu_reply_keyboard():
     return ReplyKeyboardMarkup(
         [[KeyboardButton("📋 Menu")]],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=False
     )
 
 
@@ -215,16 +218,16 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Build the menu
     keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("➕ Add Keyword", callback_data="add_keyword"),
-            InlineKeyboardButton("➖ Remove Keyword", callback_data="remove_keyword"),
-        ],
-        [
-            InlineKeyboardButton("📋 List Keywords", callback_data="list_keywords"),
-        ]
+        [InlineKeyboardButton("➕ Add Keyword", callback_data="add_keyword")],
+        [InlineKeyboardButton("➖ Remove Keyword", callback_data="remove_keyword")],
+        [InlineKeyboardButton("🔄 View Keywords", callback_data="view_keywords")],
     ])
 
-    await update.message.reply_text("Welcome, Admin 👋\nWhat would you like to do?", reply_markup=keyboard)
+    if update.message:
+        await update.message.reply_text("🔧 Admin Menu:", reply_markup=keyboard)
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("🔧 Admin Menu:", reply_markup=keyboard)
 
 
 async def handle_admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -273,44 +276,31 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(handle_admin_menu_callback)],
-    states={
-        ADD_KEYWORD: [
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
-                handle_add_keyword
-            )
-        ],
-        REMOVE_KEYWORD: [
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
-                handle_remove_keyword
-            )
-        ],
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-)
-
-
 def main():
     init_db()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Start and Menu commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", admin_menu))
+
+    # Handle text "📋 Menu"
     app.add_handler(MessageHandler(
         filters.TEXT & filters.ChatType.PRIVATE & filters.Regex("^📋 Menu$"),
         admin_menu
     ))
 
+    # Conversation handler for add/remove flows
+    conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_admin_menu_callback)],
+        states={
+            ADD_KEYWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_add_keyword)],
+            REMOVE_KEYWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_remove_keyword)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     app.add_handler(conv_handler)
-    app.add_handler(CommandHandler("start", start))
-
-    # Ban unwanted users when they join
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_members))
-
-    # Listen for chat messages and engage in conversations
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
     logger.info("Bot started...")
 
