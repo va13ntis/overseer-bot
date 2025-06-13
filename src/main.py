@@ -7,7 +7,7 @@ import requests
 from telegram import Update
 from telegram.ext import MessageHandler, filters, ApplicationBuilder, CallbackContext
 
-POLL_INTERVAL = os.getenv("BOT_POLL_INTERVAL", 10.0)
+POLL_INTERVAL = float(os.getenv("BOT_POLL_INTERVAL", 10.0))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BAN_KEYWORDS = []
 PUBLIC_PROFILE_TEMPLATE = Template("https://t.me/$username")
